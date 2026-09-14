@@ -331,7 +331,7 @@ function vHome(m){
   `<div class="sec"><h2>Dinners</h2><span class="muted" style="margin:0">${wk}</span></div>
    <div class="strip">${DAYS.map((d,i)=>{const x=p.meals[i];const dd=`ondragover="dragOver(event,this)" ondragleave="this.classList.remove('over')" ondrop="dropDay(event,${i},this)"`;return x?`<button class="day ${i===ti?"today":""}" draggable="true" ondragstart="dragDay(event,${i})" ${dd} onclick="openDay(${i})"><span class="dn">${d}${i===ti?"<b></b>":""}</span><span class="mn">${esc(x.name)}</span><span class="ct">${(x.ingredients||[]).length?missing(x).length+" to buy":"tap to fill"}</span></button>`
      :`<button class="day empty" ${dd} onclick="openDay(${i})"><span class="plus">+</span>${d}</button>`}).join("")}</div>
-   <div class="drawer"><div class="dh"><span>Common dinners</span><input placeholder="Filter…" value="${esc(dinnerQ)}" oninput="dinnerQ=this.value;renderDrawer()"><button class="lnk" style="color:#fff" onclick="drawerOpen=!drawerOpen;render()">${drawerOpen?"Hide":"Show"}</button></div>${drawerOpen?`<div class="dchips" id="dchips"></div>`:""}</div>
+
    <div class="pillrow"><button class="pill or" onclick="scramble()" ${busy?"disabled":""}>${I.dice} ${busy?"Thinking…":p.meals.some(Boolean)?"Fill empty days":"Build the week"}</button>
      ${p.meals.some(Boolean)?`<button class="pill" onclick="addWeek()">Add week to list</button><button class="pill" onclick="scramble(true)" ${busy?"disabled":""}>Redo all</button>`:""}</div></div>
    <div class="sec"><h2>Shopping list</h2>${open.length?`<button class="lnk" onclick="shop=true;render()">Start shopping</button>`:""}</div>
@@ -342,12 +342,9 @@ function vHome(m){
       <button class="btn" onclick="copyForChrome()">Send to ${esc(S.store)} with Claude in Chrome</button>
       <div class="split"><button class="btn sec" onclick="addStaples()">Add staples</button><button class="btn sec" onclick="sortAisles()" ${busy?"disabled":""}>Sort aisles</button>${done.length?`<button class="btn sec" onclick="L=L.filter(i=>!i.done);saveList();render()">Clear checked</button>`:""}</div>
       <p class="muted" style="margin:6px 0 0;text-align:center">Copies instructions you paste to Claude in Chrome on ${S.store==="Walmart"?"walmart.com":"giantfoodstores.com"}. You review and check out.</p></div>`:""}`;
-  renderShop();renderDrawer();
+  renderShop();
 }
-let drawerOpen=true,dinnerQ="";
-function dinnerLib(){const rn=S.recipes.map(r=>r.name);return [...new Set([...rn,...KNOWN])].filter(n=>!S.plan.meals.some(m=>m&&m.name.toLowerCase()===n.toLowerCase()))}
-function renderDrawer(){const el=$("#dchips");if(!el)return;const q=dinnerQ.toLowerCase();const rn=new Set(S.recipes.map(r=>r.name.toLowerCase()));
-  el.innerHTML=dinnerLib().filter(n=>n.toLowerCase().includes(q)).map(n=>`<button class="${rn.has(n.toLowerCase())?"rc":""}" draggable="true" ondragstart="event.dataTransfer.setData('text/plain','meal:'+${attr(n)});event.dataTransfer.effectAllowed='copy'" onclick="pickDayFor(${attr(n)})" title="Drag onto a day, or tap">${esc(n)}</button>`).join("")||'<span style="color:rgba(255,255,255,.7);font-size:13px">Nothing matches.</span>'}
+function dinnerLib(){const rn=S.recipes.map(r=>r.name);return [...new Set([...rn,...KNOWN])]}
 function dragOver(e,el){e.preventDefault();el.classList.add("over")}
 function dragDay(e,i){e.dataTransfer.setData("text/plain","day:"+i);e.dataTransfer.effectAllowed="move"}
 function dropDay(e,i,el){e.preventDefault();el.classList.remove("over");const d=e.dataTransfer.getData("text/plain")||"";
@@ -409,14 +406,33 @@ function copyForChrome(){const items=L.filter(i=>!i.done);if(!items.length){toas
 const hasIt=(x,g)=>(x.have||[]).some(h=>g.toLowerCase().includes(h.toLowerCase())||h.toLowerCase().includes(g.toLowerCase()));
 const missing=x=>(x.ingredients||[]).filter(g=>!hasIt(x,g));
 const PLAN_JSON=`{"meals":[{"day":"Mon","name":"","protein":"chicken|beef|pork|fish|veg","why":"≤10 words on which purchases it builds on","ingredients":["max 8 short items"],"have":["ingredients likely already on hand from recent purchases"]}]}`;
-function openDay(i){const x=S.plan.meals[i];
-  sheet(`<h3>${DAYS[i]}</h3><p class="sub">${x&&x.why?esc(x.why):"Type a dinner, or let Foodie pick one from what you buy."}</p>
-    <input class="in" id="dayIn" placeholder="Dinner…" value="${esc(x?x.name:"")}" enterkeyhint="done" onkeydown="if(event.key==='Enter')saveDay(${i})">
-    ${x?`<div class="chips">${(x.ingredients||[]).map(g=>`<span class="chip tag ${hasIt(x,g)?"have":""}">${esc(g)}</span>`).join("")||'<span class="muted" style="margin:0">No ingredients yet.</span>'}</div>`:""}
-    <div class="split"><button class="btn" onclick="saveDay(${i})">Save</button>${x?`<button class="btn sec" onclick="swapDay(${i})" ${busy?"disabled":""}>Swap</button>`:`<button class="btn sec" onclick="swapDay(${i})" ${busy?"disabled":""}>Pick for me</button>`}</div>
-    ${x?`<div class="split"><button class="btn sec" onclick="fillDay(${i})" ${busy?"disabled":""}>Fill ingredients</button><button class="btn sec gr" style="color:#fff" onclick="addMeal(${i});closeSheet()">Add ${missing(x).length||""} missing to list</button></div>
-    ${x.recipeId&&S.recipes.some(r=>r.id===x.recipeId)?`<button class="btn sec" onclick="openRecipe('${x.recipeId}')">Open recipe</button>`:""}
-    <button class="btn dng" onclick="deleteDay(${i})">Delete ${DAYS[i]}</button>`:""}`);
+let dayQ="";
+function openDay(i,q){const x=S.plan.meals[i];if(q!==undefined)dayQ=q;const ql=dayQ.trim().toLowerCase();
+  const rn=new Set(S.recipes.map(r=>r.name.toLowerCase()));
+  const opts=dinnerLib().filter(n=>!ql||n.toLowerCase().includes(ql)).sort((a,b)=>(rn.has(b.toLowerCase())-rn.has(a.toLowerCase()))||a.localeCompare(b)).slice(0,24);
+  const r=x&&S.recipes.find(r=>r.id===x.recipeId||r.name.toLowerCase()===x.name.toLowerCase());
+  sheet(`<h3>${DAYS[i]}${x?` · ${esc(x.name)}`:""}</h3><p class="sub">${busy?"Finding a recipe…":x?(r?"Recipe saved — ingredients below.":"No recipe yet for this one."):"Pick a common dinner, or type anything — if there's no recipe I'll find one."}</p>
+    <input class="in" id="dayIn" placeholder="Type a dinner…" value="${esc(dayQ)}" enterkeyhint="done" oninput="dayQ=this.value;openDay(${i});const el=$('#dayIn');el.focus();el.setSelectionRange(el.value.length,el.value.length)" onkeydown="if(event.key==='Enter')chooseDay(${i},this.value)">
+    <div class="chips" style="max-height:170px;overflow:auto">${opts.map(n=>`<button class="chip ${rn.has(n.toLowerCase())?"have":""}" onclick="chooseDay(${i},${attr(n)})">${esc(n)}</button>`).join("")||'<span class="muted" style="margin:0">Nothing matches — hit Enter to use what you typed.</span>'}</div>
+    ${x?`<div class="chips">${(x.ingredients||[]).map(g=>`<span class="chip tag ${hasIt(x,g)?"have":""}">${esc(g)}</span>`).join("")}</div>
+    <div class="split">${r?`<button class="btn" onclick="openRecipe('${r.id}')">Open recipe</button>`:`<button class="btn" onclick="findRecipeFor(${i})" ${busy?"disabled":""}>${busy?"Finding…":"Find the recipe"}</button>`}<button class="btn sec gr" style="color:#fff" onclick="addMeal(${i});closeSheet()">Add ${missing(x).length||""} missing to list</button></div>
+    <div class="split"><button class="btn sec" onclick="swapDay(${i})" ${busy?"disabled":""}>Pick for me</button><button class="btn dng" onclick="deleteDay(${i})">Delete ${DAYS[i]}</button></div>`
+    :`<button class="btn sec" onclick="swapDay(${i})" ${busy?"disabled":""}>Pick for me from what we buy</button>`}`);
+}
+async function chooseDay(i,name){name=(name||"").trim();if(!name)return;dayQ="";
+  const r=S.recipes.find(r=>r.name.toLowerCase()===name.toLowerCase());
+  S.plan.meals[i]={day:DAYS[i],name:r?r.name:name,why:r?"from your recipes":"",ingredients:r?[...r.ingredients]:[],have:[],recipeId:r?r.id:undefined};
+  if(!KNOWN.some(n=>n.toLowerCase()===name.toLowerCase()))KNOWN.push(name);save();
+  if(r){openDay(i);return}
+  await findRecipeFor(i);
+}
+async function findRecipeFor(i){if(busy)return;const x=S.plan.meals[i];if(!x)return;busy=true;openDay(i);
+  try{const t=await ask("You find weeknight dinner recipes for a family of four. Prefer well-rated, simple recipes. Respond with JSON only — no citations, no prose.",
+      `Find a good recipe for "${x.name}". Use web search. Return {"name":"${x.name.replace(/"/g,"'")}","ingredients":["shopping-style lines with amounts, max 14"],"steps":"numbered steps as plain text","url":"source page url","serves":4}`,{search:true});
+    const j=parseJSON(t);const rec={id:uid(),name:x.name,ingredients:j.ingredients||[],steps:j.steps||"",url:j.url||"",serves:j.serves||4};
+    S.recipes.push(rec);x.ingredients=[...rec.ingredients];x.recipeId=rec.id;x.why="found online";save();toast("Recipe saved to Recipes")}
+  catch(e){toast("Couldn't find one: "+e.message)}
+  busy=false;openDay(i);
 }
 function saveDay(i){const v=$("#dayIn").value.trim();if(!v)return deleteDay(i);const x=S.plan.meals[i];S.plan.meals[i]={day:DAYS[i],name:v,why:x&&x.name===v?x.why:"",ingredients:x&&x.name.toLowerCase()===v.toLowerCase()?x.ingredients:[],have:x?x.have:[],protein:x&&x.name.toLowerCase()===v.toLowerCase()?x.protein:guessProt(v)};save();closeSheet();toast("Saved")}
 function deleteDay(i){S.plan.meals[i]=null;save();closeSheet();toast(`${DAYS[i]} cleared`)}
