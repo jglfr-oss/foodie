@@ -219,7 +219,7 @@ const PKW={fish:["fish","shrimp","salmon","mahi","tuna","crab","scampi","touff",
 function guessProt(n){n=(n||"").toLowerCase();for(const k of ["fish","chicken","pork","beef","veg"]){if(PKW[k].some(w=>n.includes(w)))return k}return ""}
 const ptag=(k,sm)=>k&&PROT[k]?`<span class="pt ${sm?"sm":""}" style="background:${PROT[k].c}">${PROT[k].e} ${PROT[k].l}</span>`:"";
 const protOf=x=>x?(x.protein&&PROT[x.protein]?x.protein:guessProt(x.name)):"";
-const SEED={purchases:SEED_RECEIPTS.flatMap(r=>r.items.map(n=>({name:n,store:r.store,date:r.date}))),lastSync:"2026-09-12",plan:{weekOf:"",meals:[null,null,null,null,null]},history:[],staples:[],area:"Green Lane, PA 18054",stores:{giant:true,walmart:true},store:"Walmart",notes:"",newDish:true,balanced:true,shared:false,known:null,aisleMap:{},recipes:[]};
+const SEED={purchases:SEED_RECEIPTS.flatMap(r=>r.items.map(n=>({name:n,store:r.store,date:r.date}))),lastSync:"2026-09-12",plan:{weekOf:"",meals:[null,null,null,null,null]},history:[],staples:[],area:"Green Lane, PA 18054",stores:{giant:true,walmart:true},store:"Walmart",notes:"",newDish:true,balanced:true,shared:false,known:null,aisleMap:{},recipes:[],skip:{}};
 const KEY="foodie:state", LKEY="foodie:list";
 let S=null,L=[],tab="home",busy=false,out={},ideasTab="new",shop=false;
 
@@ -293,6 +293,14 @@ const todayIdx=()=>{const d=new Date().getDay();return d>=1&&d<=5?d-1:-1};
 /* list ops */
 function addItem(name,from,qty){const n=(name||"").trim();if(!n)return false;const ex=L.find(i=>i.name.toLowerCase()===n.toLowerCase()&&!i.done);if(ex){if(qty)ex.qty=qty;saveList();return false}L.push({id:uid(),name:n,qty:qty||"",aisle:guessAisle(n),done:false,from:from||""});saveList();return true}
 const openCount=()=>L.filter(i=>!i.done).length;
+/* the list follows the week: every planned dinner's missing ingredients are on it, and leave when the dinner does */
+function syncList(){
+  const want=new Map();S.plan.meals.filter(Boolean).forEach(x=>missing(x).forEach(g=>{const k=x.name+"|"+g.toLowerCase();if(!S.skip[k])want.set(k,{g,meal:x.name})}));
+  let changed=false;
+  L=L.filter(i=>{if(!i.auto||i.done)return true;const k=i.from+"|"+i.name.toLowerCase();if(want.has(k)){want.delete(k);return true}changed=true;return false});
+  want.forEach(({g,meal})=>{const ex=L.find(i=>i.name.toLowerCase()===g.toLowerCase()&&!i.done);if(ex){if(!ex.from){ex.from=meal;ex.auto=true}return}L.push({id:uid(),name:g,qty:"",aisle:guessAisle(g),done:false,from:meal,auto:true});changed=true});
+  if(changed)saveList();
+}
 function freq(){const m={};S.purchases.forEach(p=>{const k=p.name.toLowerCase();m[k]=m[k]||{name:p.name,count:0,last:"",stores:new Set(),spend:0,dates:[]};m[k].count+=(p.qty||1);m[k].spend+=(+p.price||0);m[k].dates.push(p.date);if(p.date>m[k].last)m[k].last=p.date;m[k].stores.add(p.store)});return Object.values(m).sort((a,b)=>b.count-a.count||b.last.localeCompare(a.last))}
 function cadence(){return freq().filter(x=>x.dates.length>=3).map(x=>{const d=[...new Set(x.dates)].sort();const gaps=[];for(let i=1;i<d.length;i++)gaps.push((new Date(d[i])-new Date(d[i-1]))/864e5);gaps.sort((a,b)=>a-b);const med=gaps[Math.floor(gaps.length/2)];const since=(Date.now()-new Date(x.last))/864e5;return {...x,every:Math.round(med),since:Math.round(since),due:since/med}}).filter(x=>x.every>=3&&x.due<=2.5&&x.since<=75).sort((a,b)=>b.due-a.due)}
 function purchaseText(){const f=freq();const recent=[...new Set(S.purchases.filter(p=>(Date.now()-new Date(p.date))/864e5<=21).map(p=>p.name))].slice(0,70);return `Purchase history (${S.purchases.length} line items over ${new Set(S.purchases.map(p=>p.date)).size} trips; item ×times, last date): `+f.slice(0,90).map(x=>`${x.name} ×${x.count} (${x.last})`).join("; ")+`\nBought in the last 3 weeks (likely on hand): ${recent.join(", ")||"nothing recorded"}`}
@@ -316,6 +324,7 @@ const I={
  dice:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="16" cy="16" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/></svg>',
 };
 function render(){
+  if(S)syncList();
   $("#fab").style.display=(tab==="home"||tab==="recipes")?"flex":"none";$("#fab").onclick=tab==="recipes"?openRecipe:openAdd;
   $("#tabs").innerHTML=[["home","Home"],["recipes","Recipes"],["pantry","Pantry"],["insights","Insights"],["ideas","Ideas"]].map(([k,l])=>`<button class="${tab===k?"on":""}" onclick="tab='${k}';render()">${I[k]}${l}${k==="home"&&openCount()?`<span class="bd">${openCount()}</span>`:""}</button>`).join("");
   ({home:vHome,recipes:vRecipes,pantry:vPantry,insights:vInsights,ideas:vIdeas})[tab]($("#app"));
@@ -333,9 +342,10 @@ function vHome(m){
      :`<button class="day empty" ${dd} onclick="openDay(${i})"><span class="plus">+</span>${d}</button>`}).join("")}</div>
 
    <div class="pillrow"><button class="pill or" onclick="scramble()" ${busy?"disabled":""}>${I.dice} ${busy?"Thinking…":p.meals.some(Boolean)?"Fill empty days":"Build the week"}</button>
-     ${p.meals.some(Boolean)?`<button class="pill" onclick="addWeek()">Add week to list</button><button class="pill" onclick="scramble(true)" ${busy?"disabled":""}>Redo all</button>`:""}</div></div>
+     ${p.meals.some(Boolean)?`<button class="pill" onclick="scramble(true)" ${busy?"disabled":""}>Redo all</button>`:""}</div></div>
    <div class="sec"><h2>Shopping list</h2>${open.length?`<button class="lnk" onclick="shop=true;render()">Start shopping</button>`:""}</div>
-   ${!open.length&&!done.length?`<div class="empty"><div class="ic">🧺</div><b>Nothing to buy yet</b><p>Tap + to add, or fill the week above and add what's missing.</p></div>`:""}
+   ${open.length||done.length?`<p class="muted" style="margin:-4px 20px 8px">Follows the dinners above. Tap + for anything else.</p>`:""}
+   ${!open.length&&!done.length?`<div class="empty"><div class="ic">🧺</div><b>Nothing to buy yet</b><p>Set some dinners above and their ingredients land here. Tap + for anything else.</p></div>`:""}
    ${groups.map(([a,items])=>`<div class="grp"><div class="gh"><span class="dot" style="background:${AC[a]}"></span>${a}<span class="cnt">${items.length}</span></div><div class="rows">${items.map(itemRow).join("")}</div></div>`).join("")}
    ${done.length?`<div class="grp"><div class="gh"><span class="dot" style="background:var(--gr)"></span>Checked off<span class="cnt">${done.length}</span></div><div class="rows">${done.map(itemRow).join("")}</div></div>`:""}
    ${open.length||done.length?`<div class="foot">
@@ -387,7 +397,7 @@ function openItem(id){const i=L.find(x=>x.id===id);if(!i)return;
   sheet(`<h3>${esc(i.name)}</h3><p class="sub">${esc(i.from||"")}</p>
     <input class="in" placeholder="Quantity (e.g. 2, 1 lb)" value="${esc(i.qty)}" onchange="L.find(x=>x.id==='${id}').qty=this.value.trim();saveList()">
     <div class="chips">${AN.map(a=>`<button class="chip ${i.aisle===a?"on":""}" style="${i.aisle===a?`background:${AC[a]}`:""}" onclick="const it=L.find(x=>x.id==='${id}');it.aisle=${attr(a)};it.manualAisle=true;S.aisleMap[it.name.toLowerCase()]=${attr(a)};save();saveList();openItem('${id}')">${a}</button>`).join("")}</div>
-    <div class="split"><button class="btn sec" onclick="toggleStaple(${attr(i.name)});openItem('${id}')">${isStaple(i.name)?"★ Staple":"☆ Make staple"}</button><button class="btn dng" onclick="L=L.filter(x=>x.id!=='${id}');saveList();closeSheet()">Delete</button></div>
+    <div class="split"><button class="btn sec" onclick="toggleStaple(${attr(i.name)});openItem('${id}')">${isStaple(i.name)?"★ Staple":"☆ Make staple"}</button><button class="btn dng" onclick="const it=L.find(x=>x.id==='${id}');if(it&&it.auto)S.skip[it.from+'|'+it.name.toLowerCase()]=true;L=L.filter(x=>x.id!=='${id}');save();saveList();closeSheet()">Delete</button></div>
     <button class="btn" onclick="closeSheet()">Done</button>`);
 }
 const isStaple=n=>S.staples.some(s=>s.toLowerCase()===n.toLowerCase());
@@ -415,7 +425,7 @@ function openDay(i,q){const x=S.plan.meals[i];if(q!==undefined)dayQ=q;const ql=d
     <input class="in" id="dayIn" placeholder="Type a dinner…" value="${esc(dayQ)}" enterkeyhint="done" oninput="dayQ=this.value;openDay(${i});const el=$('#dayIn');el.focus();el.setSelectionRange(el.value.length,el.value.length)" onkeydown="if(event.key==='Enter')chooseDay(${i},this.value)">
     <div class="chips" style="max-height:170px;overflow:auto">${opts.map(n=>`<button class="chip ${rn.has(n.toLowerCase())?"have":""}" onclick="chooseDay(${i},${attr(n)})">${esc(n)}</button>`).join("")||'<span class="muted" style="margin:0">Nothing matches — hit Enter to use what you typed.</span>'}</div>
     ${x?`<div class="chips">${(x.ingredients||[]).map(g=>`<span class="chip tag ${hasIt(x,g)?"have":""}">${esc(g)}</span>`).join("")}</div>
-    <div class="split">${r?`<button class="btn" onclick="openRecipe('${r.id}')">Open recipe</button>`:`<button class="btn" onclick="findRecipeFor(${i})" ${busy?"disabled":""}>${busy?"Finding…":"Find the recipe"}</button>`}<button class="btn sec gr" style="color:#fff" onclick="addMeal(${i});closeSheet()">Add ${missing(x).length||""} missing to list</button></div>
+    <div class="split">${r?`<button class="btn" onclick="openRecipe('${r.id}')">Open recipe</button>`:`<button class="btn" onclick="findRecipeFor(${i})" ${busy?"disabled":""}>${busy?"Finding…":"Find the recipe"}</button>`}<button class="btn sec" onclick="closeSheet()">Done</button></div>
     <div class="split"><button class="btn sec" onclick="swapDay(${i})" ${busy?"disabled":""}>Pick for me</button><button class="btn dng" onclick="deleteDay(${i})">Delete ${DAYS[i]}</button></div>`
     :`<button class="btn sec" onclick="swapDay(${i})" ${busy?"disabled":""}>Pick for me from what we buy</button>`}`);
 }
