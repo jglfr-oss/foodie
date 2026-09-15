@@ -274,6 +274,7 @@ async function load(){
     S.plan.meals.forEach(m=>{if(m){const nn=rename[m.name.toLowerCase()];if(nn)m.name=nn;const r=S.recipes.find(r=>r.name.toLowerCase()===m.name.toLowerCase());if(r&&!(m.ingredients||[]).length){m.ingredients=[...r.ingredients];m.recipeId=r.id}}});
     S.seedV=4;save()}
   await loadList();
+  if((S.seedV||0)<5){const manual=new Set(["","staple","buy again","running low"]);L.forEach(i=>{if(!manual.has((i.from||"").toLowerCase()))i.auto=true});S.seedV=5;save();saveList()}
 }
 async function loadList(){try{const r=await sGet(LKEY,!!S.shared);L=r?JSON.parse(r):[];lastListJSON=JSON.stringify(L)}catch(e){if(e.message==="passcode")throw e;L=[]}}
 let t1,t2,warned=false;
