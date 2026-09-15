@@ -426,7 +426,7 @@ function openDay(i,q){const x=S.plan.meals[i];if(q!==undefined)dayQ=q;const ql=d
     <input class="in" id="dayIn" placeholder="Type a dinner…" value="${esc(dayQ)}" enterkeyhint="done" oninput="dayQ=this.value;openDay(${i});const el=$('#dayIn');el.focus();el.setSelectionRange(el.value.length,el.value.length)" onkeydown="if(event.key==='Enter')chooseDay(${i},this.value)">
     <div class="chips" style="max-height:170px;overflow:auto">${opts.map(n=>`<button class="chip ${rn.has(n.toLowerCase())?"have":""}" onclick="chooseDay(${i},${attr(n)})">${esc(n)}</button>`).join("")||'<span class="muted" style="margin:0">Nothing matches — hit Enter to use what you typed.</span>'}</div>
     ${x?`<div class="chips">${(x.ingredients||[]).map(g=>`<span class="chip tag ${hasIt(x,g)?"have":""}">${esc(g)}</span>`).join("")}</div>
-    <div class="split">${r?`<button class="btn" onclick="openRecipe('${r.id}')">Open recipe</button>`:`<button class="btn" onclick="findRecipeFor(${i})" ${busy?"disabled":""}>${busy?"Finding…":"Find the recipe"}</button>`}<button class="btn sec" onclick="closeSheet()">Done</button></div>
+    <div class="split">${r?`<button class="btn" onclick="viewRecipe('${r.id}')">Open recipe</button>`:`<button class="btn" onclick="findRecipeFor(${i})" ${busy?"disabled":""}>${busy?"Finding…":"Find the recipe"}</button>`}<button class="btn sec" onclick="closeSheet()">Done</button></div>
     <div class="split"><button class="btn sec" onclick="swapDay(${i})" ${busy?"disabled":""}>Pick for me</button><button class="btn dng" onclick="deleteDay(${i})">Delete ${DAYS[i]}</button></div>`
     :`<button class="btn sec" onclick="swapDay(${i})" ${busy?"disabled":""}>Pick for me from what we buy</button>`}`);
 }
@@ -471,8 +471,18 @@ let recipeQ="";
 function vRecipes(m){const q=recipeQ.toLowerCase();const rs=S.recipes.filter(r=>!q||r.name.toLowerCase().includes(q)||(r.ingredients||[]).some(g=>g.toLowerCase().includes(q))).sort((a,b)=>a.name.localeCompare(b.name));
   m.innerHTML=`<div class="top" style="padding-bottom:12px">`+header("Recipes",`${S.recipes.length} saved`)+`<div class="pillrow"><button class="pill or" onclick="openRecipe()">+ New recipe</button><button class="pill" onclick="openRecipePaste()">Paste a recipe</button></div></div>
    <div style="padding:6px 20px 0"><input class="in" placeholder="Search recipes or ingredients…" value="${esc(recipeQ)}" oninput="recipeQ=this.value;render();this.focus();this.setSelectionRange(this.value.length,this.value.length)"></div>
-   ${rs.length?rs.map(r=>`<div class="rcard" onclick="openRecipe('${r.id}')"><div class="tx"><h4>${esc(r.name)}</h4><p>${(r.ingredients||[]).slice(0,6).join(", ")||"No ingredients yet"}${r.ingredients&&r.ingredients.length>6?"…":""}</p></div><button class="go" onclick="event.stopPropagation();pickDayFor(${attr(r.name)})">Plan</button></div>`).join("")
+   ${rs.length?rs.map(r=>`<div class="rcard" style="flex-wrap:wrap" onclick="viewRecipe('${r.id}')"><div class="tx" style="flex:1 1 100%"><h4>${esc(r.name)}</h4><p>${(r.ingredients||[]).slice(0,6).join(", ")||"No ingredients yet"}${r.ingredients&&r.ingredients.length>6?"…":""}</p></div>
+     <div style="display:flex;gap:8px;width:100%"><button class="go" style="flex:1;background:var(--or);color:#fff" onclick="event.stopPropagation();pickDayFor(${attr(r.name)})">Plan</button><button class="go" style="flex:1;background:#fff;box-shadow:inset 0 0 0 1.5px var(--line);color:var(--ink)" onclick="event.stopPropagation();openRecipe('${r.id}')">Edit</button><button class="go" style="flex:1" onclick="event.stopPropagation();viewRecipe('${r.id}')">View</button></div></div>`).join("")
    :`<div class="empty"><div class="ic">📖</div><b>No recipes yet</b><p>Tap + to add one, or paste a recipe from anywhere and Foodie will structure it. Recipes show up orange in Common dinners and their ingredients feed the list.</p></div>`}`;
+}
+function viewRecipe(id){const r=S.recipes.find(x=>x.id===id);if(!r)return;
+  sheet(`<h3>${esc(r.name)}</h3><p class="sub">${r.serves?"Serves "+esc(r.serves)+(r.url?" · ":""):""}${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:var(--or);font-weight:700">Source</a>`:""}</p>
+    <div class="sec" style="padding:4px 0 6px"><h2 style="font-size:15px">Ingredients</h2></div>
+    <div class="rows" style="margin-bottom:12px">${(r.ingredients||[]).map(g=>`<div class="it" style="min-height:40px;padding:8px 14px"><div class="tx" style="padding:0"><div class="nm" style="font-size:15.5px;font-weight:500">${esc(g)}</div></div></div>`).join("")||'<div class="it"><div class="tx"><div class="nm" style="color:var(--ink3)">None yet</div></div></div>'}</div>
+    <div class="sec" style="padding:4px 0 6px"><h2 style="font-size:15px">Steps</h2></div>
+    <div class="card" style="margin:0 0 12px;white-space:pre-wrap;font-size:15.5px;line-height:1.5">${esc(r.steps||"No steps yet")}</div>
+    <div class="split"><button class="btn" onclick="pickDayFor(${attr(r.name)})">Plan a day</button><button class="btn sec" onclick="openRecipe('${r.id}')">Edit</button></div>
+    <button class="btn sec" onclick="closeSheet()">Close</button>`);
 }
 function openRecipe(id){const r=id?S.recipes.find(x=>x.id===id):null;
   sheet(`<h3>${r?"Edit recipe":"New recipe"}</h3>
