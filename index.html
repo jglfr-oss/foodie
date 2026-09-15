@@ -343,7 +343,7 @@ function vHome(m){
      :`<button class="day empty" ${dd} onclick="openDay(${i})"><span class="plus">+</span>${d}</button>`}).join("")}</div>
 
    <div class="pillrow"><button class="pill or" onclick="scramble()" ${busy?"disabled":""}>${I.dice} ${busy?"Thinking…":p.meals.some(Boolean)?"Fill empty days":"Build the week"}</button>
-     ${p.meals.some(Boolean)?`<button class="pill" onclick="scramble(true)" ${busy?"disabled":""}>Redo all</button>`:""}</div></div>
+     ${p.meals.some(Boolean)?`<button class="pill" onclick="scramble(true)" ${busy?"disabled":""}>Redo all</button><button class="pill" onclick="clearWeek()">Clear week</button>`:""}</div></div>
    <div class="sec"><h2>Shopping list</h2>${open.length?`<button class="lnk" onclick="shop=true;render()">Start shopping</button>`:""}</div>
    ${open.length||done.length?`<p class="muted" style="margin:-4px 20px 8px">Follows the dinners above. Tap + for anything else.</p>`:""}
    ${!open.length&&!done.length?`<div class="empty"><div class="ic">🧺</div><b>Nothing to buy yet</b><p>Set some dinners above and their ingredients land here. Tap + for anything else.</p></div>`:""}
@@ -446,6 +446,7 @@ async function findRecipeFor(i){if(busy)return;const x=S.plan.meals[i];if(!x)ret
   busy=false;openDay(i);
 }
 function saveDay(i){const v=$("#dayIn").value.trim();if(!v)return deleteDay(i);const x=S.plan.meals[i];S.plan.meals[i]={day:DAYS[i],name:v,why:x&&x.name===v?x.why:"",ingredients:x&&x.name.toLowerCase()===v.toLowerCase()?x.ingredients:[],have:x?x.have:[],protein:x&&x.name.toLowerCase()===v.toLowerCase()?x.protein:guessProt(v)};save();closeSheet();toast("Saved")}
+function clearWeek(){const n=S.plan.meals.filter(Boolean).map(m=>m.name);if(n.length)S.history=[...S.history,...n].slice(-30);S.plan.meals=[null,null,null,null,null];save();toast('Week cleared');render()}
 function deleteDay(i){S.plan.meals[i]=null;save();closeSheet();toast(`${DAYS[i]} cleared`)}
 async function fillDay(i){if(busy)return;const x=S.plan.meals[i];const r=S.recipes.find(r=>r.name.toLowerCase()===x.name.toLowerCase());if(r&&r.ingredients.length){x.ingredients=[...r.ingredients];x.recipeId=r.id;x.why=x.why||"from your recipes";save();openDay(i);return}busy=true;openDay(i);
   try{const t=await ask(HOUSE(),`Give the grocery ingredients for a family dinner of "${x.name}" (skip pantry basics). JSON: {"ingredients":["max 8 short items"],"have":["those likely already on hand from recent purchases"],"why":"≤10 words"}`);const j=parseJSON(t);x.ingredients=j.ingredients||[];x.have=j.have||[];x.why=j.why||x.why;save()}catch(e){toast(e.message)}busy=false;openDay(i)}
